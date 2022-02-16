@@ -135,7 +135,7 @@ We also need to download some site info so we can know where these sites are.
 
 
 
-```{r site info download, eval=F}
+```{r site info download}
 #In addition to concentration informatino, we probably want to know some things about the sites
 #dplyr::select can help us only keep site information that is useful. 
 
@@ -162,8 +162,7 @@ Now that we have downloaded the data we need to tidy it up. The water quality po
 There are two data types we downloaded. First site info which has things like lat and long, and second concentration data. We already slightly tidied the site info data so that it has sensible column names 
 
 ```{r site info}
-
-head(site..info)
+head(site.info)
 ```
 
 This dataset looks nice because it has all the information we need and nothing extra. Now let's look at the concentration data. 
@@ -172,7 +171,7 @@ This dataset looks nice because it has all the information we need and nothing e
 head(conc.long) %>%
   kable(.,'html') %>%
   kable_styling() %>%
-  scroll_box(width='800px,height='300px')
+  scroll_box(width='800px', height='300px')
   
 ```
 
@@ -212,7 +211,7 @@ Now let's look at the tidier version
 ```{r examine tidier data}
 head(conc.long) %>%
   kable(.,'html') %>%
-  kablle_styling() %>%
+  kable_styling() %>%
   scroll_box(width='800px',height='300px')
 ```
 
@@ -232,14 +231,12 @@ We just need to remove these observations with a `dplyr::filter` call and then s
 
 ```{r tidy}
 conc.tidy <- conc.clean %>% 
-  filter(units = 'tons/day') %>%
+  filter(., units == 'mg/l') %>%
   mutate(date=ymd(date)) %>%
   select(date,
          parameter,
          SiteID,
          conc=value)
-
-
 ```
 
 ### Daily data
@@ -275,7 +272,7 @@ site.sf <- site.info %>%
   st_as_sf(., coords=c('long','lat'), crs=4326)
 
 
-mapview(site.info)
+mapview(site.sf)
 
 ```
 
@@ -293,7 +290,7 @@ To keep the plots simple at first let's look at calcium data by site.
 ```{r daily plot}
 conc.daily %>%
   filter(parameter == 'Calcium') %>%
-  ggplot(.,aes(x=date,y=conc)) + 
+  ggplot(.,aes(x=date,y=conc_mean)) + 
   geom_point() + 
   facet_wrap(~SiteID)
   
@@ -310,8 +307,8 @@ Let's shrink the dataset to only look at annual change.
 conc.annual <- conc.daily %>%
   mutate(year=year(date)) %>%
   group_by(SiteID,year,parameter) %>%
-  summarize(annual_mean=mean(conc,na.rm=T),
-            annual_var=var(conc,na.rm=T))
+  summarize(annual_mean=mean(conc_mean,na.rm=T),
+            annual_var=var(conc_mean,na.rm=T))
   
 
 ```
@@ -370,15 +367,12 @@ From basic weathering geochemistry principles we know that Bicarbonate concentra
 
 ```{r}
 conc.wide <- conc.annual %>%
-  select(annual_var) %>%
-  spread(key=parameter,value=annual_mean) %>%
-  mutate(`Mg+Ca`=Magnesium+Calcium)
+  select(parameter, annual_mean,year)%>%
+  spread(parameter, annual_mean)%>%
+  mutate(`Mg+Ca`= Magnesium + Calcium)
 
-
-ggplot(conc.wide,aes(x=Bicarbonate,y=`Mg+Ca`,color=SiteID)) + 
-  geom_point() + 
-  geom_abline(slope=1,intercept=0)
-
+ggplot(conc.wide, aes(x=Bicarbonate,y=`Mg+Ca`,color=SiteID)) + 
+  geom_point() 
 
 ```
 
@@ -420,8 +414,8 @@ Now we have an individual time-series analysis model for each site and parameter
 
 ```{r}
 conc.models %>%
-  mutate(mod.glance=map(mods,glance)) %>%
-  unnest(mod.gglance) %>% #Unnesting unwraps the nested column. 
+  mutate(mod.glance=map(mods, glance)) %>%
+  unnest(mod.glance) %>% #Unnesting unwraps the nested column. 
   arrange(desc(adj.r.squared)) %>%
   select(parameter,SiteID,adj.r.squared,p.value,logLik,AIC) %>%
   kable(.,'html') %>%
